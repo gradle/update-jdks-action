@@ -67,7 +67,12 @@
     ]
   },
   "dependencies": {
-    "@actions/core": "^1.11.1"
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0",
+    "@octokit/plugin-retry": "^6.0.1",
+    "@types/js-yaml": "^4.0.9",
+    "axios": "^1.7.7",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@github/local-action": "^2.1.2",
