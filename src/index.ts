@@ -73,7 +73,7 @@ export async function run(github: GitHub, context: Context): Promise<void> {
       return
     }
 
-    const updatedYaml = yaml.dump(data)
+    const updatedYaml = yaml.dump(data, { quotingType: '"', forceQuotes: true })
     fs.writeFileSync(filePath, updatedYaml, 'utf8')
     core.info('YAML file updated successfully')
   } catch (error) {

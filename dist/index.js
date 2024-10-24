@@ -39364,7 +39364,7 @@ async function run(github, context) {
             core.info('No updates found. Exiting.');
             return;
         }
-        const updatedYaml = yaml.dump(data);
+        const updatedYaml = yaml.dump(data, { quotingType: '"', forceQuotes: true });
         fs.writeFileSync(filePath, updatedYaml, 'utf8');
         core.info('YAML file updated successfully');
     }
