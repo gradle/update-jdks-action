@@ -1,29 +1,17 @@
 import * as core from '@actions/core'
-import { GitHub } from '@actions/github/lib/utils'
-import axios from 'axios'
 import * as fs from 'fs'
 import * as yaml from 'js-yaml'
-import { Context as Ctx } from '@actions/github/lib/context'
 
-import { context, getOctokit } from '@actions/github'
-import { retry } from '@octokit/plugin-retry'
-
-type GitHub = InstanceType<typeof GitHub> //eslint-disable-line no-redeclare
-type Context = Ctx
-
-function getGitHub(): GitHub {
-  const token: string = core.getInput('token', { required: true })
-  return getOctokit(token, retry)
+interface Jdk {
+  os: string
+  arch: string
+  vendor: string
+  version: string
+  sha256: string
 }
 
-class Jdk {
-  constructor(
-    public os: string,
-    public arch: string,
-    public vendor: string,
-    public version: string,
-    public sha256: string
-  ) {}
+interface JdksYaml {
+  jdks: Jdk[]
 }
 
 const OS_MAPPING: Map<string, string> = new Map([
@@ -41,16 +29,17 @@ function getOrError(map: Map<string, string>, key: string): string {
   return (
     map.get(key) ||
     (() => {
-      throw new Error(`Key '${key}' not found in the map ${map}`)
+      const keys = Array.from(map.keys()).join(', ')
+      throw new Error(`Key '${key}' not found. Available keys: [${keys}]`)
     })()
   )
 }
 
-export async function run(github: GitHub, context: Context): Promise<void> {
+export async function run(): Promise<void> {
   try {
     const filePath = '.teamcity/jdks.yaml'
     const fileContents = fs.readFileSync(filePath, 'utf8')
-    const data = yaml.load(fileContents) as any
+    const data = yaml.load(fileContents) as JdksYaml
 
     let changesMade = false
 
@@ -76,8 +65,8 @@ export async function run(github: GitHub, context: Context): Promise<void> {
     const updatedYaml = yaml.dump(data, { quotingType: '"', forceQuotes: true })
     fs.writeFileSync(filePath, updatedYaml, 'utf8')
     core.info('YAML file updated successfully')
-  } catch (error) {
-    core.setFailed(`Action failed with error: ${error}`)
+  } catch (error: unknown) {
+    core.setFailed(`Action failed with error: ${String(error)}`)
   }
 }
 
@@ -133,20 +122,45 @@ function extractMajorVersion(jdkString: string): number {
   return parseInt(match[1], 10)
 }
 
-async function getLatestTemurinVersion(jdk: Jdk): Promise<{ version: string; sha256: string }> {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+async function getLatestTemurinVersion(
+  jdk: Jdk
+): Promise<{ version: string; sha256: string }> {
   const majorVersion = extractMajorVersion(jdk.version)
   const targetArch = getOrError(ARCH_MAPPING, jdk.arch)
   const targetOs = getOrError(OS_MAPPING, jdk.os)
   const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${targetOs}&architecture=${targetArch}`
-  const response = await axios.get(apiUrl)
 
-  const latestAsset = response.data[0]
+  // Using fetch instead of axios
+  const response = await fetch(apiUrl)
 
-  if (latestAsset) {
-    return { version: latestAsset.release_name, sha256: latestAsset.binary.package.checksum }
-  } else {
-    throw new Error(`Failed to fetch the latest version for JDK ${majorVersion}`)
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch the latest version for JDK ${majorVersion}: ${response.statusText}`
+    )
+  }
+
+  const data = await response.json()
+  const latestAsset = data[0]
+
+  if (
+    !latestAsset ||
+    !latestAsset.release_name ||
+    !latestAsset.binary?.package?.checksum
+  ) {
+    throw new Error(
+      `Invalid data structure: expected release_name and binary.package.checksum in the response for JDK ${majorVersion}`
+    )
+  }
+
+  return {
+    version: latestAsset.release_name,
+    sha256: latestAsset.binary.package.checksum
   }
 }
 
-run(getGitHub(), context)
+run().catch(error => {
+  console.error(error)
+})
