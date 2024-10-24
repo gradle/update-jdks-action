@@ -16,10 +16,6 @@ function getGitHub(): GitHub {
   return getOctokit(token, retry)
 }
 
-function getContext(): Context {
-  return context
-}
-
 class Jdk {
   constructor(
     public os: string,
@@ -153,4 +149,4 @@ async function getLatestTemurinVersion(jdk: Jdk): Promise<{ version: string; sha
   }
 }
 
-run(getGitHub(), getContext())
+run(getGitHub(), context)

@@ -39312,9 +39312,6 @@ function getGitHub() {
     const token = core.getInput('token', { required: true });
     return (0, github_1.getOctokit)(token, plugin_retry_1.retry);
 }
-function getContext() {
-    return github_1.context;
-}
 class Jdk {
     os;
     arch;
@@ -39439,7 +39436,7 @@ async function getLatestTemurinVersion(jdk) {
         throw new Error(`Failed to fetch the latest version for JDK ${majorVersion}`);
     }
 }
-run(getGitHub(), getContext());
+run(getGitHub(), github_1.context);
 
 
 /***/ }),
