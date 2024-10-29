@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: Update jdks.yaml
-        uses: gradle/update-jdks-action
+        uses: gradle/update-jdks-action@main
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:

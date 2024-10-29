@@ -29886,7 +29886,7 @@ async function getLatestTemurinVersion(jdk) {
     const majorVersion = extractMajorVersion(jdk.version);
     const targetArch = getOrError(ARCH_MAPPING, jdk.arch);
     const targetOs = getOrError(OS_MAPPING, jdk.os);
-    const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${targetOs}&architecture=${targetArch}`;
+    const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${targetOs}&architecture=${targetArch}&image_type=jdk`;
     // Using fetch instead of axios
     const response = await fetch(apiUrl);
     if (!response.ok) {
