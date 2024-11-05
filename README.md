@@ -31,10 +31,10 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
-          commit-message: "Update jdks.yaml"
+          commit-message: 'Update jdks.yaml'
           add-paths: .teamcity/jdks.yaml
-          title: "Update jdks.yaml"
-          body: "This PR contains automated updates to the jdks.yaml file."
+          title: 'Update jdks.yaml'
+          body: 'This PR contains automated updates to the jdks.yaml file.'
           delete-branch: true
           branch-suffix: timestamp
 ```
