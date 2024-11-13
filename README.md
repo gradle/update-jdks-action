@@ -38,3 +38,12 @@ jobs:
           delete-branch: true
           branch-suffix: timestamp
 ```
+
+## Make changes
+
+After making changes to the TypeScript code, run the following command to
+compile the code
+
+```bash
+npm run package
+```
