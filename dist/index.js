@@ -29888,9 +29888,6 @@ function extractMajorVersion(jdkString) {
     }
     return parseInt(match[1], 10);
 }
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 async function getLatestTemurinVersion(jdk) {
     const majorVersion = extractMajorVersion(jdk.version);
     const targetArch = getOrError(ARCH_MAPPING, jdk.arch);
