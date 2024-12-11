@@ -138,9 +138,6 @@ function extractMajorVersion(jdkString: string): number {
   return parseInt(match[1], 10)
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 async function getLatestTemurinVersion(
   jdk: Jdk
 ): Promise<{ version: string; sha256: string }> {
