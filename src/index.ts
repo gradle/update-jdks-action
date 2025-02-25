@@ -63,11 +63,13 @@ export async function run(): Promise<void> {
     for (const jdk of jdks) {
       console.log(`jdk: ${JSON.stringify(jdk)}`)
       if (jdk.vendor === 'temurin') {
-        const { version, sha256 } = await getLatestTemurinVersion(jdk)
-        if (jdk.version !== version) {
-          core.info(`Updating ${jdk.version} to version ${version}`)
-          jdk.version = version
-          jdk.sha256 = sha256
+        const result = await getLatestTemurinVersion(jdk)
+        if (result === null) {
+          core.warning(`No version data found for JDK ${jdk.version}`)
+        } else if (jdk.version !== result.version) {
+          core.info(`Updating ${jdk.version} to version ${result.version}`)
+          jdk.version = result.version
+          jdk.sha256 = result.sha256
           changesMade = true
         }
       }
@@ -140,13 +142,12 @@ function extractMajorVersion(jdkString: string): number {
 
 async function getLatestTemurinVersion(
   jdk: Jdk
-): Promise<{ version: string; sha256: string }> {
+): Promise<{ version: string; sha256: string } | null> {
   const majorVersion = extractMajorVersion(jdk.version)
   const targetArch = getOrError(ARCH_MAPPING, jdk.arch)
   const targetOs = getOrError(OS_MAPPING, jdk.os)
   const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${targetOs}&architecture=${targetArch}&image_type=jdk`
 
-  // Using fetch instead of axios
   const response = await fetch(apiUrl)
 
   if (!response.ok) {
@@ -156,16 +157,21 @@ async function getLatestTemurinVersion(
   }
 
   const data = await response.json()
+
+  if (!data || !data.length || !data[0]) {
+    console.warn(
+      `Invalid API Response for JDK ${majorVersion}: ${JSON.stringify(data)}`
+    )
+    return null
+  }
+
   const latestAsset = data[0]
 
-  if (
-    !latestAsset ||
-    !latestAsset.release_name ||
-    !latestAsset.binary?.package?.checksum
-  ) {
-    throw new Error(
-      `Invalid data structure: expected release_name and binary.package.checksum in the response for JDK ${majorVersion}: ${JSON.stringify(data)}`
+  if (!latestAsset.release_name || !latestAsset.binary?.package?.checksum) {
+    console.warn(
+      `Invalid asset structure for JDK ${majorVersion}: ${JSON.stringify(latestAsset)}`
     )
+    return null
   }
 
   return {
