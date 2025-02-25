@@ -157,16 +157,20 @@ async function getLatestTemurinVersion(
   }
 
   const data = await response.json()
-  
+
   if (!data || !data.length || !data[0]) {
-    console.warn(`Invalid API Response for JDK ${majorVersion}: ${JSON.stringify(data)}`)
+    console.warn(
+      `Invalid API Response for JDK ${majorVersion}: ${JSON.stringify(data)}`
+    )
     return null
   }
 
   const latestAsset = data[0]
 
   if (!latestAsset.release_name || !latestAsset.binary?.package?.checksum) {
-    console.warn(`Invalid asset structure for JDK ${majorVersion}: ${JSON.stringify(latestAsset)}`)
+    console.warn(
+      `Invalid asset structure for JDK ${majorVersion}: ${JSON.stringify(latestAsset)}`
+    )
     return null
   }
 
