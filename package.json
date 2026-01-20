@@ -73,7 +73,7 @@
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {
-    "@github/local-action": "^6.0.2",
+    "@github/local-action": "^7.0.0",
     "@jest/globals": "^30.2.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.0.9",
