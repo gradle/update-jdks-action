@@ -21933,7 +21933,10 @@ async function run() {
       info("No updates found. Exiting.");
       return;
     }
-    const updatedYaml = dump(data, { quotingType: '"', forceQuotes: true });
+    const updatedYaml = dump(data, {
+      quoteStyle: "double",
+      forceQuotes: true
+    });
     fs2.writeFileSync(filePath, updatedYaml, "utf8");
     info("YAML file updated successfully");
   } catch (error2) {

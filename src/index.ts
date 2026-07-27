@@ -80,7 +80,10 @@ export async function run(): Promise<void> {
       return
     }
 
-    const updatedYaml = yaml.dump(data, { quotingType: '"', forceQuotes: true })
+    const updatedYaml = yaml.dump(data, {
+      quoteStyle: 'double',
+      forceQuotes: true
+    })
     fs.writeFileSync(filePath, updatedYaml, 'utf8')
     core.info('YAML file updated successfully')
   } catch (error: unknown) {
