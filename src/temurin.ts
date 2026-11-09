@@ -100,17 +100,21 @@ interface TemurinRelease {
   sha256: string
 }
 
-async function fetchJson(apiUrl: string, majorVersion: number): Promise<any> {
+async function fetchPage(
+  apiUrl: string,
+  majorVersion: number
+): Promise<{ data: any; next: string | null }> {
   const response = await fetch(apiUrl)
   if (response.status === 404) {
-    return null
+    return { data: null, next: null }
   }
   if (!response.ok) {
     throw new Error(
       `Failed to fetch JDK ${majorVersion} from ${apiUrl}: ${response.statusText} ${await response.text()}`
     )
   }
-  return response.json()
+  const next = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)
+  return { data: await response.json(), next: next ? next[1] : null }
 }
 
 async function getLatestGaVersion(
@@ -119,7 +123,7 @@ async function getLatestGaVersion(
   arch: string
 ): Promise<TemurinRelease | null> {
   const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${os}&architecture=${arch}&image_type=jdk`
-  const data = await fetchJson(apiUrl, majorVersion)
+  const { data } = await fetchPage(apiUrl, majorVersion)
 
   if (!data || !data.length || !data[0]) {
     console.warn(
@@ -143,30 +147,40 @@ async function getLatestGaVersion(
   }
 }
 
+const EA_MAX_PAGES = 50
+
 async function getLatestEaVersion(
   majorVersion: number,
   os: string,
   arch: string
 ): Promise<TemurinRelease | null> {
-  const apiUrl = `https://api.adoptium.net/v3/assets/feature_releases/${majorVersion}/ea?os=${os}&architecture=${arch}&image_type=jdk&jvm_impl=hotspot&page_size=50&sort_order=DESC`
-  const data = await fetchJson(apiUrl, majorVersion)
+  let pageUrl: string | null =
+    `https://api.adoptium.net/v3/assets/feature_releases/${majorVersion}/ea?os=${os}&architecture=${arch}&image_type=jdk&jvm_impl=hotspot&sort_order=DESC&page_size=20`
   // Skips update-branch nightlies such as jdk27u-2026-11-07-17-08-beta.
   const featureEa = new RegExp(`^jdk-${majorVersion}\\+(\\d+)-ea(-beta)?$`)
 
   let best: { build: number; release: TemurinRelease } | null = null
-  for (const asset of Array.isArray(data) ? data : []) {
-    const match = String(asset?.release_name).match(featureEa)
-    const checksum = asset?.binaries?.find(
-      (b: any) => b?.image_type === 'jdk' && b?.package?.checksum
-    )?.package.checksum
-    if (!match || !checksum) {
-      continue
+  // Newest first, so later pages only hold older builds once one is found.
+  for (let page = 0; pageUrl && page < EA_MAX_PAGES && !best; page++) {
+    const { data, next } = await fetchPage(pageUrl, majorVersion)
+    pageUrl = next
+    if (!Array.isArray(data)) {
+      break
     }
-    const build = parseInt(match[1], 10)
-    if (!best || build > best.build) {
-      best = {
-        build,
-        release: { version: asset.release_name, sha256: checksum }
+    for (const asset of data) {
+      const match = String(asset?.release_name).match(featureEa)
+      const checksum = asset?.binaries?.find(
+        (b: any) => b?.image_type === 'jdk' && b?.package?.checksum
+      )?.package.checksum
+      if (!match || !checksum) {
+        continue
+      }
+      const build = parseInt(match[1], 10)
+      if (!best || build > best.build) {
+        best = {
+          build,
+          release: { version: asset.release_name, sha256: checksum }
+        }
       }
     }
   }
