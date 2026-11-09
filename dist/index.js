@@ -22136,7 +22136,7 @@ var CHOMPING_CLIP = CHOMPING_MODE.CLIP;
 var CHOMPING_STRIP = CHOMPING_MODE.STRIP;
 var CHOMPING_KEEP = CHOMPING_MODE.KEEP;
 
-// src/index.ts
+// src/temurin.ts
 var OS_MAPPING = /* @__PURE__ */ new Map([
   ["windows", "windows"],
   ["linux", "linux"],
@@ -22152,6 +22152,92 @@ function getOrError(map, key) {
     throw new Error(`Key '${key}' not found. Available keys: [${keys}]`);
   })();
 }
+function extractMajorVersion(jdkString) {
+  if (jdkString.startsWith("jdk8u")) {
+    return 8;
+  }
+  const match = jdkString.match(/jdk-(\d+)/);
+  if (!match) {
+    throw new Error(`Major version not found in string: ${jdkString}`);
+  }
+  return parseInt(match[1], 10);
+}
+async function fetchPage(apiUrl, majorVersion) {
+  const response = await fetch(apiUrl);
+  if (response.status === 404) {
+    return { data: null, next: null };
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch JDK ${majorVersion} from ${apiUrl}: ${response.statusText} ${await response.text()}`
+    );
+  }
+  const next = response.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/);
+  return { data: await response.json(), next: next ? next[1] : null };
+}
+async function getLatestGaVersion(majorVersion, os4, arch2) {
+  const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${os4}&architecture=${arch2}&image_type=jdk`;
+  const { data } = await fetchPage(apiUrl, majorVersion);
+  if (!data || !data.length || !data[0]) {
+    console.warn(
+      `Invalid API Response for JDK ${majorVersion}: ${JSON.stringify(data)}`
+    );
+    return null;
+  }
+  const latestAsset = data[0];
+  if (!latestAsset.release_name || !latestAsset.binary?.package?.checksum) {
+    console.warn(
+      `Invalid asset structure for JDK ${majorVersion}: ${JSON.stringify(latestAsset)}`
+    );
+    return null;
+  }
+  return {
+    version: latestAsset.release_name,
+    sha256: latestAsset.binary.package.checksum
+  };
+}
+var EA_MAX_PAGES = 50;
+async function getLatestEaVersion(majorVersion, os4, arch2) {
+  let pageUrl = `https://api.adoptium.net/v3/assets/feature_releases/${majorVersion}/ea?os=${os4}&architecture=${arch2}&image_type=jdk&jvm_impl=hotspot&sort_order=DESC&page_size=20`;
+  const featureEa = new RegExp(`^jdk-${majorVersion}\\+(\\d+)-ea(-beta)?$`);
+  let best = null;
+  for (let page = 0; pageUrl && page < EA_MAX_PAGES && !best; page++) {
+    const { data, next } = await fetchPage(pageUrl, majorVersion);
+    pageUrl = next;
+    if (!Array.isArray(data)) {
+      break;
+    }
+    for (const asset of data) {
+      const match = String(asset?.release_name).match(featureEa);
+      const checksum = asset?.binaries?.find(
+        (b) => b?.image_type === "jdk" && b?.package?.checksum
+      )?.package.checksum;
+      if (!match || !checksum) {
+        continue;
+      }
+      const build2 = parseInt(match[1], 10);
+      if (!best || build2 > best.build) {
+        best = {
+          build: build2,
+          release: { version: asset.release_name, sha256: checksum }
+        };
+      }
+    }
+  }
+  return best?.release ?? null;
+}
+async function getLatestTemurinVersion(jdk) {
+  const majorVersion = extractMajorVersion(jdk.version);
+  const targetArch = getOrError(ARCH_MAPPING, jdk.arch);
+  const targetOs = getOrError(OS_MAPPING, jdk.os);
+  const ga = await getLatestGaVersion(majorVersion, targetOs, targetArch);
+  if (ga !== null || !/-ea\b/.test(jdk.version)) {
+    return ga;
+  }
+  return getLatestEaVersion(majorVersion, targetOs, targetArch);
+}
+
+// src/index.ts
 async function run() {
   try {
     const filePath = ".teamcity/jdks.yaml";
@@ -22186,46 +22272,6 @@ async function run() {
   } catch (error2) {
     setFailed(`Action failed with error: ${String(error2)}`);
   }
-}
-function extractMajorVersion(jdkString) {
-  if (jdkString.startsWith("jdk8u")) {
-    return 8;
-  }
-  const match = jdkString.match(/jdk-(\d+)/);
-  if (!match) {
-    throw new Error(`Major version not found in string: ${jdkString}`);
-  }
-  return parseInt(match[1], 10);
-}
-async function getLatestTemurinVersion(jdk) {
-  const majorVersion = extractMajorVersion(jdk.version);
-  const targetArch = getOrError(ARCH_MAPPING, jdk.arch);
-  const targetOs = getOrError(OS_MAPPING, jdk.os);
-  const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${targetOs}&architecture=${targetArch}&image_type=jdk`;
-  const response = await fetch(apiUrl);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch the latest version for JDK ${majorVersion}: ${response.statusText} ${await response.text()}`
-    );
-  }
-  const data = await response.json();
-  if (!data || !data.length || !data[0]) {
-    console.warn(
-      `Invalid API Response for JDK ${majorVersion}: ${JSON.stringify(data)}`
-    );
-    return null;
-  }
-  const latestAsset = data[0];
-  if (!latestAsset.release_name || !latestAsset.binary?.package?.checksum) {
-    console.warn(
-      `Invalid asset structure for JDK ${majorVersion}: ${JSON.stringify(latestAsset)}`
-    );
-    return null;
-  }
-  return {
-    version: latestAsset.release_name,
-    sha256: latestAsset.binary.package.checksum
-  };
 }
 run().catch((error2) => {
   console.error(error2);
