@@ -95,23 +95,31 @@ function extractMajorVersion(jdkString: string): number {
   return parseInt(match[1], 10)
 }
 
-export async function getLatestTemurinVersion(
-  jdk: Jdk
-): Promise<{ version: string; sha256: string } | null> {
-  const majorVersion = extractMajorVersion(jdk.version)
-  const targetArch = getOrError(ARCH_MAPPING, jdk.arch)
-  const targetOs = getOrError(OS_MAPPING, jdk.os)
-  const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${targetOs}&architecture=${targetArch}&image_type=jdk`
+interface TemurinRelease {
+  version: string
+  sha256: string
+}
 
+async function fetchJson(apiUrl: string, majorVersion: number): Promise<any> {
   const response = await fetch(apiUrl)
-
+  if (response.status === 404) {
+    return null
+  }
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch the latest version for JDK ${majorVersion}: ${response.statusText} ${await response.text()}`
+      `Failed to fetch JDK ${majorVersion} from ${apiUrl}: ${response.statusText} ${await response.text()}`
     )
   }
+  return response.json()
+}
 
-  const data = await response.json()
+async function getLatestGaVersion(
+  majorVersion: number,
+  os: string,
+  arch: string
+): Promise<TemurinRelease | null> {
+  const apiUrl = `https://api.adoptium.net/v3/assets/latest/${majorVersion}/hotspot?os=${os}&architecture=${arch}&image_type=jdk`
+  const data = await fetchJson(apiUrl, majorVersion)
 
   if (!data || !data.length || !data[0]) {
     console.warn(
@@ -133,4 +141,48 @@ export async function getLatestTemurinVersion(
     version: latestAsset.release_name,
     sha256: latestAsset.binary.package.checksum
   }
+}
+
+async function getLatestEaVersion(
+  majorVersion: number,
+  os: string,
+  arch: string
+): Promise<TemurinRelease | null> {
+  const apiUrl = `https://api.adoptium.net/v3/assets/feature_releases/${majorVersion}/ea?os=${os}&architecture=${arch}&image_type=jdk&jvm_impl=hotspot&page_size=50&sort_order=DESC`
+  const data = await fetchJson(apiUrl, majorVersion)
+  // Skips update-branch nightlies such as jdk27u-2026-11-07-17-08-beta.
+  const featureEa = new RegExp(`^jdk-${majorVersion}\\+(\\d+)-ea(-beta)?$`)
+
+  let best: { build: number; release: TemurinRelease } | null = null
+  for (const asset of Array.isArray(data) ? data : []) {
+    const match = String(asset?.release_name).match(featureEa)
+    const checksum = asset?.binaries?.find(
+      (b: any) => b?.image_type === 'jdk' && b?.package?.checksum
+    )?.package.checksum
+    if (!match || !checksum) {
+      continue
+    }
+    const build = parseInt(match[1], 10)
+    if (!best || build > best.build) {
+      best = {
+        build,
+        release: { version: asset.release_name, sha256: checksum }
+      }
+    }
+  }
+  return best?.release ?? null
+}
+
+export async function getLatestTemurinVersion(
+  jdk: Jdk
+): Promise<TemurinRelease | null> {
+  const majorVersion = extractMajorVersion(jdk.version)
+  const targetArch = getOrError(ARCH_MAPPING, jdk.arch)
+  const targetOs = getOrError(OS_MAPPING, jdk.os)
+
+  const ga = await getLatestGaVersion(majorVersion, targetOs, targetArch)
+  if (ga !== null || !/-ea\b/.test(jdk.version)) {
+    return ga
+  }
+  return getLatestEaVersion(majorVersion, targetOs, targetArch)
 }
